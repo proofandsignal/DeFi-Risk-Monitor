@@ -6,8 +6,10 @@ import { evaluateAlerts } from "./domain/alerts.js";
 import { assessHealthFactor } from "./domain/risk.js";
 import { simulateScenario } from "./domain/scenario.js";
 import type { ScenarioInput } from "./domain/types.js";
+import { startMonitorScheduler } from "./monitoring/scheduler.js";
 
 const config = loadConfig();
+const monitor = startMonitorScheduler(config);
 
 function sendJson(
   response: ServerResponse,
@@ -58,8 +60,27 @@ const server = createServer(async (request, response) => {
       return sendJson(response, 200, {
         status: "ok",
         service: "defi-risk-monitor",
-        version: "0.1.0",
+        version: "0.2.0",
         liveAaveConfigured: Boolean(config.aaveRpcUrl),
+        monitoring: {
+          configured: monitor.configured,
+          running: monitor.running,
+          walletCount: config.monitoredWallets.length,
+          alertDeliveryConfigured: Boolean(config.alertWebhookUrl),
+          intervalSeconds: config.monitorIntervalSeconds,
+          lastRun: monitor.lastRun,
+        },
+      });
+    }
+
+    if (method === "GET" && url.pathname === "/api/v1/monitor/status") {
+      return sendJson(response, 200, {
+        configured: monitor.configured,
+        running: monitor.running,
+        walletCount: config.monitoredWallets.length,
+        intervalSeconds: config.monitorIntervalSeconds,
+        alertDeliveryConfigured: Boolean(config.alertWebhookUrl),
+        lastRun: monitor.lastRun,
       });
     }
 
@@ -124,3 +145,11 @@ const server = createServer(async (request, response) => {
 server.listen(config.port, () => {
   console.log(`DeFi Risk Monitor listening on port ${config.port}`);
 });
+
+function shutdown(): void {
+  monitor.stop();
+  server.close(() => process.exit(0));
+}
+
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);

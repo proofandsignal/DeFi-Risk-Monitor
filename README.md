@@ -1,40 +1,47 @@
 # DeFi Risk Monitor
 
-Read-only DeFi position risk intelligence.
+Read-only DeFi position risk intelligence by **Proof & Signal**.
 
-## v0.1 scope
+## v0.2 — Monitoring & Alert Delivery
 
-The first release is intentionally narrow:
-
-- Aave V3 account snapshot from a public RPC endpoint
-- Health Factor classification
-- approximate liquidation-distance indicator
-- deterministic collateral/debt shock simulator
-- informational risk alerts
-- validation gates for **DEFI RISK 20**
-
-The product is **read-only and non-custodial**. It does not request private keys, hold funds, sign transactions, execute orders, auto-repay debt, or tell a user what asset to buy or sell.
-
-## Architecture
+The product now has two layers:
 
 ```text
-Public wallet address
-        |
-        v
-Aave V3 Pool.getUserAccountData()
-        |
-        v
-Risk Engine
-  - Health Factor
-  - risk state
-  - uniform-collateral liquidation buffer
-        |
-        +--> Alert Engine
-        |
-        +--> Scenario Simulator
+Public Aave wallet
+       |
+       v
+Aave V3 account snapshot
+       |
+       v
+Health Factor + risk state
+       |
+       v
+Persistent monitor state
+       |
+       +--> risk-state worsening
+       +--> material HF drop
+       +--> recovery
+       |
+       v
+Generic webhook delivery
 ```
 
-The live Aave adapter uses only the Pool view method `getUserAccountData(address)`.
+v0.2 is designed for the first paid monitoring test: keep watching a public Aave position and deliver a useful alert when risk materially changes.
+
+### Alert rules
+
+A monitoring event is emitted when:
+
+- a wallet first appears in WATCH / DANGER / CRITICAL,
+- the risk state worsens,
+- Health Factor drops by at least `ALERT_HF_DROP_THRESHOLD` while remaining in the same risk state,
+- a previously risky position recovers to SAFE / NO_DEBT.
+
+Healthy unchanged positions do not generate repeated alerts.
+
+## Product boundary
+
+The product is **read-only and non-custodial**. It does not request private keys, hold funds, sign transactions, execute orders, auto-repay debt, or tell a user what asset to buy or sell.
 
 ## Risk states
 
@@ -48,7 +55,7 @@ The labels below are **product heuristics**, not Aave protocol rules:
 | DANGER | 1.00 - 1.19 |
 | CRITICAL | <= 1.00 |
 
-Aave liquidation eligibility is determined by the protocol's own Health Factor logic. The only hard protocol boundary represented here is HF <= 1.
+Aave liquidation eligibility is determined by the protocol's own Health Factor logic. The hard protocol boundary represented here is HF <= 1.
 
 ## Run locally
 
@@ -57,74 +64,63 @@ Requires Node.js 22+.
 ```bash
 npm install
 cp .env.example .env
-# set AAVE_RPC_URL in your shell or env loader
-npm run build
-AAVE_RPC_URL=https://... npm start
+npm run check
+npm start
 ```
 
-Health check:
+Configure monitoring:
 
 ```bash
-curl http://localhost:3000/health
+AAVE_RPC_URL=https://...
+MONITORED_WALLETS=0xWallet1,0xWallet2
+MONITOR_INTERVAL_SECONDS=300
+ALERT_HF_DROP_THRESHOLD=0.1
+ALERT_WEBHOOK_URL=https://your-alert-receiver.example/webhook
 ```
 
-Live account snapshot:
-
-```bash
-curl http://localhost:3000/api/v1/aave/account/0xYOUR_WALLET
-```
-
-Scenario simulation:
-
-```bash
-curl -X POST http://localhost:3000/api/v1/simulate \
-  -H "content-type: application/json" \
-  -d '{
-    "collaterals":[
-      {"symbol":"WETH","valueUsd":15000,"liquidationThreshold":0.825},
-      {"symbol":"USDC","valueUsd":5000,"liquidationThreshold":0.80}
-    ],
-    "debts":[{"symbol":"USDC","valueUsd":10000}],
-    "shocksPct":{"WETH":-15}
-  }'
-```
+The scheduler performs an immediate scan at startup and then repeats at the configured interval. State is persisted atomically to `data/monitor-state.json` by default.
 
 ## API
 
 ### `GET /health`
-Service health.
+Service health plus monitor configuration/status.
+
+### `GET /api/v1/monitor/status`
+Returns last monitoring run, wallet count, interval and delivery configuration without exposing the webhook URL or RPC URL.
 
 ### `GET /api/v1/aave/account/:wallet`
-Reads Aave V3 aggregate account data and returns the product risk state. Requires `AAVE_RPC_URL`.
+Reads Aave V3 aggregate account data and returns the current risk state.
 
 ### `POST /api/v1/simulate`
-Runs a deterministic portfolio shock scenario from supplied collateral/debt values.
+Runs a deterministic portfolio shock scenario.
 
 ### `POST /api/v1/alerts/evaluate`
-Evaluates informational alerts for a supplied Health Factor.
+Evaluates the informational alert for a supplied Health Factor.
 
-## Configuration
+## Persistence and privacy
 
-See `.env.example`.
-
-The default Pool address is the Ethereum mainnet Aave V3 Pool. The RPC endpoint is never hard-coded.
+Only public wallet addresses and derived Aave account-risk snapshots are persisted by the monitor. RPC credentials and webhook URLs are configuration secrets and are never written to the monitor state file.
 
 ## Validation before monetization
 
 Technical gate:
 
-`Data Quality -> Risk Math -> Simulator -> Alerts -> DEFI RISK 20`
+`Data Quality -> Risk Math -> Monitoring persistence -> Threshold transitions -> Webhook delivery -> DEFI RISK 20`
 
 Commercial gate:
 
-`10 testers -> >=5 monitored users -> first EUR9 paid test`
+`10 testers -> >=5 keep monitoring enabled -> first EUR9/month paid test`
+
+v0.2 is not considered PASS until a real deployed instance successfully:
+
+1. reads a monitored public Aave wallet repeatedly,
+2. persists consecutive snapshots,
+3. detects a controlled threshold/state transition,
+4. delivers a webhook alert,
+5. survives restart without forgetting the previous state.
 
 See `docs/VALIDATION.md`.
 
-## Product boundary
-
-See `docs/PRODUCT_BOUNDARY.md`.
-
 ## Status
 
-`v0.1 — BUILD`
+`v0.2 — BUILD / CI + live delivery validation pending`
