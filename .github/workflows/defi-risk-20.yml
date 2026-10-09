@@ -1,0 +1,59 @@
+name: DEFI RISK 20
+
+on:
+  workflow_dispatch:
+    inputs:
+      wallets:
+        description: "Exactly 20 public Ethereum wallet addresses, separated by commas, spaces, or new lines"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      AAVE_RPC_URL: ${{ secrets.AAVE_RPC_URL }}
+      RISK20_WALLETS: ${{ inputs.wallets }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify RPC secret
+        shell: bash
+        run: |
+          if [ -z "$AAVE_RPC_URL" ]; then
+            echo "::error::Missing repository secret AAVE_RPC_URL"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Run DEFI RISK 20
+        run: npm run validate:risk20
+
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: defi-risk-20
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 30
