@@ -8,7 +8,7 @@ export interface AppConfig {
 }
 
 const DEFAULT_AAVE_V3_ETHEREUM_POOL =
-  "0x87870Bca3F3fd6335C3F4ce8392D69350B4fa4E2";
+  "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2";
 
 function intFromEnv(name: string, fallback: number): number {
   const raw = process.env[name];
