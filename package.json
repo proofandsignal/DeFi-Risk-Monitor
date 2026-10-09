@@ -1,6 +1,6 @@
 {
   "name": "defi-risk-monitor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "check": "npm run build && npm test"
+    "check": "npm run build && npm test",
+    "validate:risk20": "node dist/validation/defiRisk20.js"
   },
   "dependencies": {
     "viem": "^2.57.4"
