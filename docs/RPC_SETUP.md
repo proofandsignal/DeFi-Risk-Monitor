@@ -55,15 +55,20 @@ After the secret exists:
 1. Open **Actions**.
 2. Select **DEFI RISK 20**.
 3. Choose **Run workflow**.
-4. Paste exactly 20 unique public Ethereum wallet addresses.
+4. Leave the wallet field blank for automatic discovery.
 5. Run the workflow.
+
+Auto-discovery reads recent public Aave V3 `Borrow` events from Ethereum, keeps wallets that still have active debt, sorts them by current Health Factor, and samples 20 positions across the observed Health Factor distribution.
+
+You can still paste exactly 20 unique public Ethereum wallet addresses to override automatic discovery.
 
 The workflow:
 
 - verifies that the secret exists
 - builds the TypeScript project
 - runs unit tests
-- performs 20 read-only Aave V3 account queries
+- discovers or validates exactly 20 public Aave V3 accounts
+- performs read-only Aave V3 account queries
 - writes JSON and CSV artifacts
 - never signs or broadcasts a transaction
 
