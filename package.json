@@ -8,10 +8,10 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "test": "vitest run",
     "check": "npm run build && npm test",
-    "validate:risk20": "node dist/validation/defiRisk20.js"
+    "validate:risk20": "node dist/src/validation/defiRisk20.js"
   },
   "dependencies": {
     "viem": "^2.57.4"
