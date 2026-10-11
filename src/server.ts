@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { getAddress } from "viem";
+import { getAavePositionSnapshot } from "./adapters/aaveGraphql.js";
 import { AaveV3Reader } from "./adapters/aaveV3.js";
 import { loadConfig } from "./config.js";
 import { evaluateAlerts } from "./domain/alerts.js";
@@ -81,11 +82,32 @@ const server = createServer(async (request, response) => {
         baseCurrencyDecimals: config.aaveBaseCurrencyDecimals,
       });
 
-      const snapshot = await reader.getAccountSnapshot(wallet);
+      const [snapshot, positions] = await Promise.all([
+        reader.getAccountSnapshot(wallet),
+        getAavePositionSnapshot({
+          wallet,
+          chainId: 1,
+          poolAddress: config.aavePoolAddress,
+        }),
+      ]);
+
       return sendJson(response, 200, {
         snapshot,
+        positions,
         risk: assessHealthFactor(snapshot.healthFactor),
         alerts: evaluateAlerts(snapshot.healthFactor),
+        evidence: [
+          {
+            kind: "ONCHAIN",
+            source: `Aave V3 Pool ${snapshot.poolAddress} getUserAccountData`,
+            observedAt: snapshot.observedAt,
+          },
+          {
+            kind: "AAVE_API",
+            source: positions.source,
+            observedAt: positions.observedAt,
+          },
+        ],
       });
     }
 

@@ -18,6 +18,21 @@ export interface AaveAccountSnapshot {
   observedAt: string;
 }
 
+export interface AaveSupplyPosition {
+  symbol: string;
+  amount: string;
+  valueUsd: number;
+  apyPct: number | null;
+  isCollateral: boolean;
+}
+
+export interface AaveBorrowPosition {
+  symbol: string;
+  amount: string;
+  valueUsd: number;
+  apyPct: number | null;
+}
+
 export interface RiskAssessment {
   healthFactor: number | null;
   state: RiskState;
