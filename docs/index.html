@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="Read-only Aave position risk intelligence: Health Factor, liquidation distance, scenarios and monitoring." />
+  <title>DeFi Risk Monitor — Proof & Signal</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="./" aria-label="DeFi Risk Monitor home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 36 36" role="img">
+            <path d="M18 3 31 10.5v15L18 33 5 25.5v-15L18 3Z" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M10.5 22.5 15 13l4 8 2.8-5.2 3.7 6.7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span>
+          <strong>DeFi Risk Monitor</strong>
+          <small>Proof &amp; Signal</small>
+        </span>
+      </a>
+
+      <nav class="nav" aria-label="Primary">
+        <button class="nav-item active" data-view="overview">
+          <span>◫</span> Overview
+        </button>
+        <button class="nav-item" data-view="positions">
+          <span>≋</span> Positions
+        </button>
+        <button class="nav-item" data-view="simulator">
+          <span>⌁</span> Simulator
+        </button>
+        <button class="nav-item" data-view="alerts">
+          <span>◉</span> Alerts
+        </button>
+        <button class="nav-item" data-view="history">
+          <span>⌗</span> History
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="read-only">
+          <span class="dot"></span>
+          <div>
+            <strong>Read-only</strong>
+            <small>No custody. No signing.</small>
+          </div>
+        </div>
+        <a class="repo-link" href="https://github.com/proofandsignal/DeFi-Risk-Monitor" rel="noreferrer">GitHub repository ↗</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">AAVE V3 · ETHEREUM</div>
+          <h1>Position Risk Dashboard</h1>
+        </div>
+        <div class="top-actions">
+          <span id="modePill" class="mode-pill">DEMO MODE</span>
+          <button id="refreshBtn" class="icon-btn" title="Refresh">↻</button>
+        </div>
+      </header>
+
+      <section class="wallet-panel card">
+        <div class="wallet-copy">
+          <label for="walletInput">Public wallet address</label>
+          <p>Paste an Ethereum address. The monitor reads public protocol data only.</p>
+        </div>
+        <form id="walletForm" class="wallet-form">
+          <input id="walletInput" autocomplete="off" spellcheck="false" placeholder="0x..." value="0x7A3f...91C2" aria-label="Ethereum wallet address" />
+          <button class="primary-btn" type="submit">Scan position</button>
+        </form>
+        <div id="walletNotice" class="wallet-notice" role="status">
+          Demo data is displayed until the live API is deployed.
+        </div>
+      </section>
+
+      <section id="view-overview" class="view active">
+        <div class="metric-grid">
+          <article class="metric-card card accent">
+            <div class="metric-head">
+              <span>Health Factor</span>
+              <span id="hfBadge" class="risk-badge watch">WATCH</span>
+            </div>
+            <div class="metric-value" id="healthFactor">1.34</div>
+            <div class="metric-foot">Liquidation threshold: HF ≤ 1.00</div>
+          </article>
+
+          <article class="metric-card card">
+            <div class="metric-head"><span>Liquidation buffer</span><span>↓</span></div>
+            <div class="metric-value" id="liqBuffer">25.4%</div>
+            <div class="metric-foot">Approx. uniform collateral decline to HF 1.00</div>
+          </article>
+
+          <article class="metric-card card">
+            <div class="metric-head"><span>Total collateral</span><span>◈</span></div>
+            <div class="metric-value">$24,820</div>
+            <div class="metric-foot">Aave collateral value</div>
+          </article>
+
+          <article class="metric-card card">
+            <div class="metric-head"><span>Total debt</span><span>◇</span></div>
+            <div class="metric-value">$15,140</div>
+            <div class="metric-foot">Variable debt outstanding</div>
+          </article>
+        </div>
+
+        <div class="two-col">
+          <article class="card chart-card">
+            <div class="section-head">
+              <div>
+                <span class="eyebrow">RISK HISTORY</span>
+                <h2>Health Factor</h2>
+              </div>
+              <span class="muted">7 days</span>
+            </div>
+            <div class="chart-wrap">
+              <svg viewBox="0 0 720 260" class="risk-chart" aria-label="Demo Health Factor history">
+                <defs>
+                  <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#8a7dff" stop-opacity=".34"/>
+                    <stop offset="100%" stop-color="#8a7dff" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <line x1="28" y1="205" x2="700" y2="205" class="grid-line danger-line"/>
+                <line x1="28" y1="150" x2="700" y2="150" class="grid-line"/>
+                <line x1="28" y1="95" x2="700" y2="95" class="grid-line"/>
+                <path d="M30,78 C90,88 115,102 160,98 S240,112 285,123 S365,108 410,120 S490,136 540,132 S620,142 695,148 L695,230 L30,230 Z" fill="url(#area)"/>
+                <path d="M30,78 C90,88 115,102 160,98 S240,112 285,123 S365,108 410,120 S490,136 540,132 S620,142 695,148" fill="none" stroke="#9b92ff" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="695" cy="148" r="5" fill="#b7b0ff"/>
+                <text x="30" y="250" class="chart-label">7d ago</text>
+                <text x="650" y="250" class="chart-label">now</text>
+                <text x="642" y="198" class="danger-label">HF 1.00</text>
+              </svg>
+            </div>
+            <div class="chart-summary">
+              <span><i class="legend-dot current"></i> Current <strong>1.34</strong></span>
+              <span><i class="legend-dot min"></i> 7d low <strong>1.29</strong></span>
+              <span><i class="legend-dot max"></i> 7d high <strong>1.61</strong></span>
+            </div>
+          </article>
+
+          <article class="card exposure-card">
+            <div class="section-head">
+              <div>
+                <span class="eyebrow">EXPOSURE</span>
+                <h2>Collateral mix</h2>
+              </div>
+              <span class="muted">Demo</span>
+            </div>
+
+            <div class="donut-row">
+              <div class="donut" aria-label="Collateral mix demo">
+                <div class="donut-inner">
+                  <strong>$24.8k</strong>
+                  <small>collateral</small>
+                </div>
+              </div>
+              <div class="exposure-list">
+                <div><span><i class="asset-dot a"></i>WETH</span><strong>61%</strong></div>
+                <div><span><i class="asset-dot b"></i>wstETH</span><strong>29%</strong></div>
+                <div><span><i class="asset-dot c"></i>USDC</span><strong>10%</strong></div>
+              </div>
+            </div>
+
+            <div class="risk-note">
+              <span class="risk-note-icon">!</span>
+              <div>
+                <strong>Concentration watch</strong>
+                <p>90% of collateral is ETH-correlated in this demo position.</p>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">POSITION COMPONENTS</span>
+              <h2>What is driving risk?</h2>
+            </div>
+            <button class="text-btn" data-jump="positions">View all →</button>
+          </div>
+          <div class="position-table-wrap">
+            <table class="position-table">
+              <thead>
+                <tr><th>Asset</th><th>Type</th><th>Value</th><th>APY</th><th>Risk role</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="token">Ξ</span> WETH</td><td>Collateral</td><td>$15,140</td><td>1.92%</td><td><span class="tag purple">Primary collateral</span></td></tr>
+                <tr><td><span class="token">◈</span> wstETH</td><td>Collateral</td><td>$7,200</td><td>2.38%</td><td><span class="tag blue">Correlated collateral</span></td></tr>
+                <tr><td><span class="token">$</span> USDC</td><td>Debt</td><td>$15,140</td><td>4.76%</td><td><span class="tag amber">Borrow cost</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section id="view-positions" class="view">
+        <article class="card">
+          <div class="section-head">
+            <div><span class="eyebrow">AAVE V3</span><h2>Position breakdown</h2></div>
+            <span class="risk-badge watch">WATCH</span>
+          </div>
+          <div class="position-table-wrap">
+            <table class="position-table large">
+              <thead><tr><th>Asset</th><th>Side</th><th>Value</th><th>APY</th><th>LT</th><th>Share</th></tr></thead>
+              <tbody>
+                <tr><td><span class="token">Ξ</span> WETH</td><td>Supply</td><td>$15,140</td><td>1.92%</td><td>82.5%</td><td>61%</td></tr>
+                <tr><td><span class="token">◈</span> wstETH</td><td>Supply</td><td>$7,200</td><td>2.38%</td><td>81.0%</td><td>29%</td></tr>
+                <tr><td><span class="token">$</span> USDC</td><td>Supply</td><td>$2,480</td><td>3.11%</td><td>78.0%</td><td>10%</td></tr>
+                <tr class="debt-row"><td><span class="token">$</span> USDC</td><td>Borrow</td><td>$15,140</td><td>4.76%</td><td>—</td><td>100%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section id="view-simulator" class="view">
+        <div class="two-col simulator-layout">
+          <article class="card">
+            <div class="section-head">
+              <div><span class="eyebrow">SCENARIO ENGINE</span><h2>Collateral shock</h2></div>
+              <span class="muted">Informational</span>
+            </div>
+            <div class="slider-block">
+              <div class="slider-label"><span>ETH-correlated collateral move</span><strong id="shockLabel">-10%</strong></div>
+              <input id="shockSlider" type="range" min="-40" max="20" step="1" value="-10" />
+              <div class="slider-scale"><span>-40%</span><span>0%</span><span>+20%</span></div>
+            </div>
+            <div class="preset-row">
+              <button class="preset" data-shock="-5">-5%</button>
+              <button class="preset active" data-shock="-10">-10%</button>
+              <button class="preset" data-shock="-20">-20%</button>
+              <button class="preset" data-shock="-30">-30%</button>
+            </div>
+            <p class="fine-print">Assumes balances and protocol parameters remain unchanged. This is a deterministic scenario, not a market-price prediction.</p>
+          </article>
+
+          <article class="card scenario-result">
+            <span class="eyebrow">SIMULATED RESULT</span>
+            <div class="scenario-hf">
+              <div><small>Current HF</small><strong>1.34</strong></div>
+              <span>→</span>
+              <div><small>Simulated HF</small><strong id="simHf">1.21</strong></div>
+            </div>
+            <div id="simState" class="scenario-state watch">WATCH</div>
+            <div class="scenario-meter"><span id="scenarioMeterFill"></span></div>
+            <div class="meter-labels"><span>Liquidation</span><span>Safer</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-alerts" class="view">
+        <div class="two-col">
+          <article class="card">
+            <div class="section-head">
+              <div><span class="eyebrow">MONITORING</span><h2>Alert rules</h2></div>
+              <span class="muted">Preview</span>
+            </div>
+            <div class="alert-rule"><span class="rule-dot amber"></span><div><strong>WATCH</strong><p>Health Factor drops below 1.50</p></div><span class="switch on"></span></div>
+            <div class="alert-rule"><span class="rule-dot orange"></span><div><strong>DANGER</strong><p>Health Factor drops below 1.20</p></div><span class="switch on"></span></div>
+            <div class="alert-rule"><span class="rule-dot red"></span><div><strong>CRITICAL</strong><p>Health Factor reaches 1.00 or below</p></div><span class="switch on"></span></div>
+          </article>
+          <article class="card">
+            <div class="section-head"><div><span class="eyebrow">DELIVERY</span><h2>Channels</h2></div></div>
+            <div class="channel"><span>✉</span><div><strong>Email</strong><p>Planned for monitoring build</p></div><button disabled>Coming soon</button></div>
+            <div class="channel"><span>↗</span><div><strong>Webhook</strong><p>Planned for monitoring build</p></div><button disabled>Coming soon</button></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-history" class="view">
+        <article class="card">
+          <div class="section-head">
+            <div><span class="eyebrow">EVIDENCE TRAIL</span><h2>Risk snapshots</h2></div>
+            <span class="muted">Demo dataset</span>
+          </div>
+          <div class="timeline">
+            <div class="timeline-row"><span>Today · 08:20 UTC</span><strong>HF 1.34</strong><em class="risk-badge watch">WATCH</em><p>Collateral -2.1% vs prior snapshot</p></div>
+            <div class="timeline-row"><span>Yesterday · 08:20 UTC</span><strong>HF 1.39</strong><em class="risk-badge watch">WATCH</em><p>No alert state change</p></div>
+            <div class="timeline-row"><span>3 days ago</span><strong>HF 1.52</strong><em class="risk-badge safe">SAFE</em><p>State changed SAFE → WATCH after market move</p></div>
+          </div>
+        </article>
+      </section>
+
+      <footer class="footer">
+        <p>Independent read-only risk intelligence. Not investment advice. No custody, no transaction execution.</p>
+        <p>Proof &amp; Signal · DeFi Risk Monitor v0.2 UI</p>
+      </footer>
+    </main>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
