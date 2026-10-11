@@ -47,18 +47,24 @@ export async function discoverRisk20Wallets(
   });
 
   const latestBlock = await client.getBlockNumber();
-  const maxLookbackBlocks = 120_000n;
-  const chunkSize = 2_000n;
+
+  // Alchemy Free tier currently limits eth_getLogs to a 10-block range.
+  // Scan recent history in compatible windows and stop as soon as we have
+  // enough active borrowers for a representative 20-wallet quantile sample.
+  const maxLookbackBlocks = 20_000n;
+  const chunkSize = 10n;
+  const targetActiveBorrowers = 30;
   const floorBlock =
     latestBlock > maxLookbackBlocks ? latestBlock - maxLookbackBlocks : 0n;
 
   let toBlock = latestBlock;
   let oldestScannedBlock = latestBlock;
+  let logQueries = 0;
 
   const seen = new Set<string>();
   const active: ActiveBorrower[] = [];
 
-  while (toBlock >= floorBlock && active.length < 60) {
+  while (toBlock >= floorBlock && active.length < targetActiveBorrowers) {
     let fromBlock =
       toBlock >= chunkSize - 1n ? toBlock - chunkSize + 1n : 0n;
 
@@ -72,6 +78,7 @@ export async function discoverRisk20Wallets(
       fromBlock,
       toBlock,
     });
+    logQueries += 1;
 
     oldestScannedBlock = fromBlock;
 
@@ -101,7 +108,13 @@ export async function discoverRisk20Wallets(
         // Discovery is best-effort. Final validation still treats failures strictly.
       }
 
-      if (active.length >= 60) break;
+      if (active.length >= targetActiveBorrowers) break;
+    }
+
+    if (logQueries % 100 === 0) {
+      console.log(
+        `Discovery progress: ${active.length} active borrowers from ${seen.size} unique borrowers after ${logQueries} log queries`,
+      );
     }
 
     if (fromBlock === 0n || fromBlock <= floorBlock) break;
@@ -110,7 +123,7 @@ export async function discoverRisk20Wallets(
 
   if (active.length < 20) {
     throw new Error(
-      `Auto-discovery found only ${active.length} active Aave borrowers after scanning ${seen.size} unique recent borrowers`,
+      `Auto-discovery found only ${active.length} active Aave borrowers after scanning ${seen.size} unique recent borrowers across ${logQueries} log queries`,
     );
   }
 
@@ -129,6 +142,6 @@ export async function discoverRisk20Wallets(
     uniqueBorrowersSeen: seen.size,
     activeBorrowersFound: active.length,
     selectionMethod:
-      "Recent Aave V3 Borrow events; current active-debt wallets sampled across Health Factor quantiles",
+      "Recent Aave V3 Borrow events scanned in 10-block windows; current active-debt wallets sampled across Health Factor quantiles",
   };
 }
