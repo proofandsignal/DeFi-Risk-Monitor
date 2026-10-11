@@ -31,3 +31,8 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Verify runtime entrypoints
+        run: |
+          test -f dist/src/server.js
+          test -f dist/src/validation/defiRisk20.js
