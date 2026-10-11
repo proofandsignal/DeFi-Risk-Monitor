@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       wallets:
-        description: "Exactly 20 public Ethereum wallet addresses, separated by commas, spaces, or new lines"
-        required: true
+        description: "Optional: exactly 20 public Ethereum wallet addresses. Leave blank to auto-discover 20 active Aave V3 borrowers."
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -14,7 +15,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     env:
       AAVE_RPC_URL: ${{ secrets.AAVE_RPC_URL }}

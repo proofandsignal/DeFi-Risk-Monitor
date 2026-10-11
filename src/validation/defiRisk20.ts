@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 import { AaveV3Reader } from "../adapters/aaveV3.js";
 import { loadConfig } from "../config.js";
 import { assessHealthFactor } from "../domain/risk.js";
+import {
+  discoverRisk20Wallets,
+  type Risk20DiscoveryResult,
+} from "./discovery.js";
 import { parseRisk20Wallets } from "./input.js";
 
 interface ValidationRow {
@@ -36,15 +40,33 @@ function csvCell(value: string | number | null): string {
 async function main(): Promise<void> {
   const config = loadConfig();
   if (!config.aaveRpcUrl) {
-    throw new Error("AAVE_RPC_URL is required; configure it as a repository secret or local environment variable");
+    throw new Error(
+      "AAVE_RPC_URL is required; configure it as a repository secret or local environment variable",
+    );
   }
 
   const walletsRaw = process.env.RISK20_WALLETS?.trim();
-  if (!walletsRaw) {
-    throw new Error("RISK20_WALLETS is required and must contain exactly 20 public Ethereum wallet addresses");
+  let discovery: Risk20DiscoveryResult | null = null;
+
+  const wallets = walletsRaw
+    ? parseRisk20Wallets(walletsRaw)
+    : (
+        (discovery = await discoverRisk20Wallets({
+          rpcUrl: config.aaveRpcUrl,
+          poolAddress: config.aavePoolAddress,
+          baseCurrencyDecimals: config.aaveBaseCurrencyDecimals,
+        })),
+        discovery.wallets
+      );
+
+  if (discovery) {
+    console.log(
+      `Auto-discovered 20 wallets from ${discovery.activeBorrowersFound} active borrowers after seeing ${discovery.uniqueBorrowersSeen} unique recent borrowers`,
+    );
+  } else {
+    console.log("Using 20 manually supplied public wallet addresses");
   }
 
-  const wallets = parseRisk20Wallets(walletsRaw);
   const reader = new AaveV3Reader({
     rpcUrl: config.aaveRpcUrl,
     poolAddress: config.aavePoolAddress,
@@ -67,7 +89,8 @@ async function main(): Promise<void> {
         totalDebtBase: snapshot.totalDebtBase,
         currentLiquidationThreshold: snapshot.currentLiquidationThreshold,
         ltv: snapshot.ltv,
-        uniformCollateralDropToLiquidationPct: risk.uniformCollateralDropToLiquidationPct,
+        uniformCollateralDropToLiquidationPct:
+          risk.uniformCollateralDropToLiquidationPct,
         status: "ok",
         error: null,
       });
@@ -113,6 +136,8 @@ async function main(): Promise<void> {
     chainId: 1,
     protocol: "Aave V3",
     generatedAt: new Date().toISOString(),
+    walletSource: discovery ? "auto-discovery" : "manual",
+    discovery,
     total: rows.length,
     succeeded: ok.length,
     failed: failed.length,
@@ -143,10 +168,20 @@ async function main(): Promise<void> {
 
   const csv = [
     headers.join(","),
-    ...rows.map((row) => headers.map((header) => csvCell(row[header] as string | number | null)).join(",")),
+    ...rows.map((row) =>
+      headers
+        .map((header) =>
+          csvCell(row[header] as string | number | null),
+        )
+        .join(","),
+    ),
   ].join("\n");
 
-  await writeFile(resolve(outputDir, "defi-risk-20.csv"), csv + "\n", "utf8");
+  await writeFile(
+    resolve(outputDir, "defi-risk-20.csv"),
+    csv + "\n",
+    "utf8",
+  );
 
   console.log(
     `DEFI RISK 20 complete: ${ok.length}/20 successful; ${failed.length} failed; states=${JSON.stringify(states)}`,
