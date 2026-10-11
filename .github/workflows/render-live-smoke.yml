@@ -1,0 +1,44 @@
+name: Render Live Smoke
+
+on:
+  push:
+    branches:
+      - build/render-live-smoke
+    paths:
+      - ".github/workflows/render-live-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Health endpoint
+        run: |
+          node <<'NODE'
+          const url = "https://defi-risk-monitor-api.onrender.com/health";
+          const response = await fetch(url);
+          const body = await response.json();
+          console.log(body);
+          if (!response.ok) throw new Error(`health_http_${response.status}`);
+          if (body.status !== "ok") throw new Error("health_status_not_ok");
+          if (body.liveAaveConfigured !== true) throw new Error("aave_rpc_not_configured");
+          NODE
+
+      - name: Live Aave read
+        run: |
+          node <<'NODE'
+          const wallet = "0x000000000000000000000000000000000000dEaD";
+          const url = `https://defi-risk-monitor-api.onrender.com/api/v1/aave/account/${wallet}`;
+          const response = await fetch(url);
+          const text = await response.text();
+          console.log(text);
+          if (!response.ok) throw new Error(`aave_http_${response.status}:${text.slice(0,300)}`);
+          const body = JSON.parse(text);
+          if (!body.snapshot) throw new Error("snapshot_missing");
+          if (Number(body.snapshot.chainId) !== 1) throw new Error("wrong_chain");
+          if (!body.snapshot.observedAt) throw new Error("observed_at_missing");
+          NODE
