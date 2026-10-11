@@ -6,14 +6,18 @@ import { evaluateAlerts } from "./domain/alerts.js";
 import { assessHealthFactor } from "./domain/risk.js";
 import { simulateScenario } from "./domain/scenario.js";
 import type { ScenarioInput } from "./domain/types.js";
+import { startMonitorScheduler } from "./monitoring/scheduler.js";
 
 const config = loadConfig();
+const monitor = startMonitorScheduler(config);
 
-function sendJson(
-  response: ServerResponse,
-  statusCode: number,
-  body: unknown,
-): void {
+function sanitizeError(message: string): string {
+  return message
+    .replace(/https?:\/\/[^\s"']+/gi, "[redacted-url]")
+    .replace(/([?&](?:key|token|apikey|api_key)=)[^&\s]+/gi, "$1[redacted]");
+}
+
+function sendJson(response: ServerResponse, statusCode: number, body: unknown): void {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
@@ -25,14 +29,12 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let bytes = 0;
   const maxBytes = 64 * 1024;
-
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     bytes += buffer.length;
     if (bytes > maxBytes) throw new Error("request body too large");
     chunks.push(buffer);
   }
-
   if (chunks.length === 0) return {};
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
@@ -40,10 +42,8 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
 function routeWallet(pathname: string): string | null {
   const prefix = "/api/v1/aave/account/";
   if (!pathname.startsWith(prefix)) return null;
-  const candidate = decodeURIComponent(pathname.slice(prefix.length));
-
   try {
-    return getAddress(candidate);
+    return getAddress(decodeURIComponent(pathname.slice(prefix.length)));
   } catch {
     return null;
   }
@@ -58,29 +58,42 @@ const server = createServer(async (request, response) => {
       return sendJson(response, 200, {
         status: "ok",
         service: "defi-risk-monitor",
-        version: "0.1.0",
+        version: "0.2.1",
         liveAaveConfigured: Boolean(config.aaveRpcUrl),
+        monitorHealth: monitor.health,
+        monitoring: {
+          configured: monitor.configured,
+          running: monitor.running,
+          walletCount: config.monitoredWallets.length,
+          intervalSeconds: config.monitorIntervalSeconds,
+          alertDeliveryConfigured: Boolean(config.alertWebhookUrl),
+          lastRun: monitor.lastRun,
+        },
+      });
+    }
+
+    if (method === "GET" && url.pathname === "/api/v1/monitor/status") {
+      return sendJson(response, 200, {
+        health: monitor.health,
+        configured: monitor.configured,
+        running: monitor.running,
+        walletCount: config.monitoredWallets.length,
+        intervalSeconds: config.monitorIntervalSeconds,
+        alertDeliveryConfigured: Boolean(config.alertWebhookUrl),
+        lastRun: monitor.lastRun,
       });
     }
 
     if (method === "GET" && url.pathname.startsWith("/api/v1/aave/account/")) {
       const wallet = routeWallet(url.pathname);
-      if (!wallet) {
-        return sendJson(response, 400, { error: "invalid wallet address" });
-      }
-
-      if (!config.aaveRpcUrl) {
-        return sendJson(response, 503, {
-          error: "AAVE_RPC_URL is required for live Aave reads",
-        });
-      }
+      if (!wallet) return sendJson(response, 400, { error: "invalid wallet address" });
+      if (!config.aaveRpcUrl) return sendJson(response, 503, { error: "AAVE_RPC_URL is required for live Aave reads" });
 
       const reader = new AaveV3Reader({
         rpcUrl: config.aaveRpcUrl,
         poolAddress: config.aavePoolAddress,
         baseCurrencyDecimals: config.aaveBaseCurrencyDecimals,
       });
-
       const snapshot = await reader.getAccountSnapshot(wallet);
       return sendJson(response, 200, {
         snapshot,
@@ -97,26 +110,15 @@ const server = createServer(async (request, response) => {
     if (method === "POST" && url.pathname === "/api/v1/alerts/evaluate") {
       const body = (await readJson(request)) as { healthFactor?: unknown };
       const value = body.healthFactor;
-
-      if (
-        value !== null &&
-        (typeof value !== "number" || !Number.isFinite(value))
-      ) {
-        return sendJson(response, 400, {
-          error: "healthFactor must be a finite number or null",
-        });
+      if (value !== null && (typeof value !== "number" || !Number.isFinite(value))) {
+        return sendJson(response, 400, { error: "healthFactor must be a finite number or null" });
       }
-
-      return sendJson(
-        response,
-        200,
-        evaluateAlerts((value ?? null) as number | null),
-      );
+      return sendJson(response, 200, evaluateAlerts((value ?? null) as number | null));
     }
 
     return sendJson(response, 404, { error: "not found" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "unknown error";
+    const message = sanitizeError(error instanceof Error ? error.message : "unknown error");
     return sendJson(response, 400, { error: message });
   }
 });
@@ -124,3 +126,10 @@ const server = createServer(async (request, response) => {
 server.listen(config.port, () => {
   console.log(`DeFi Risk Monitor listening on port ${config.port}`);
 });
+
+function shutdown(): void {
+  monitor.stop();
+  server.close(() => process.exit(0));
+}
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
