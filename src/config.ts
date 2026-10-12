@@ -5,10 +5,13 @@ export interface AppConfig {
   aaveRpcUrl: string | null;
   aavePoolAddress: Address;
   aaveBaseCurrencyDecimals: number;
+  corsAllowedOrigin: string;
+  scanRateLimitPerMinute: number;
 }
 
 const DEFAULT_AAVE_V3_ETHEREUM_POOL =
   "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2";
+const DEFAULT_CORS_ALLOWED_ORIGIN = "https://proofandsignal.github.io";
 
 function intFromEnv(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -34,5 +37,8 @@ export function loadConfig(): AppConfig {
       "AAVE_BASE_CURRENCY_DECIMALS",
       8,
     ),
+    corsAllowedOrigin:
+      process.env.CORS_ALLOWED_ORIGIN?.trim() || DEFAULT_CORS_ALLOWED_ORIGIN,
+    scanRateLimitPerMinute: intFromEnv("SCAN_RATE_LIMIT_PER_MINUTE", 20),
   };
 }
