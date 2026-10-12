@@ -17,6 +17,7 @@ export interface AaveV3ReaderConfig {
   rpcUrl: string;
   poolAddress: Address;
   baseCurrencyDecimals: number;
+  timeoutMs?: number;
 }
 
 export class AaveV3Reader {
@@ -27,7 +28,9 @@ export class AaveV3Reader {
     this.config = config;
     this.client = createPublicClient({
       chain: mainnet,
-      transport: http(config.rpcUrl),
+      transport: http(config.rpcUrl, {
+        timeout: config.timeoutMs ?? 10_000,
+      }),
     });
   }
 

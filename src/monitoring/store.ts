@@ -1,8 +1,50 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { MonitorStateFile } from "./types.js";
+import type { MonitorAlertEvent, MonitorSnapshot, MonitorStateFile } from "./types.js";
 
-const emptyState = (): MonitorStateFile => ({ version: 1, wallets: {} });
+interface LegacyMonitorStateFile {
+  version: 1;
+  wallets: Record<string, MonitorSnapshot>;
+}
+
+const emptyState = (): MonitorStateFile => ({
+  version: 2,
+  wallets: {},
+  pendingAlerts: {},
+});
+
+function normalizeState(parsed: unknown): MonitorStateFile {
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("invalid monitor state schema");
+  }
+
+  const candidate = parsed as Partial<MonitorStateFile & LegacyMonitorStateFile>;
+  if (!candidate.wallets || typeof candidate.wallets !== "object") {
+    throw new Error("invalid monitor state schema");
+  }
+
+  if (candidate.version === 1) {
+    return {
+      version: 2,
+      wallets: candidate.wallets,
+      pendingAlerts: {},
+    };
+  }
+
+  if (
+    candidate.version !== 2 ||
+    !candidate.pendingAlerts ||
+    typeof candidate.pendingAlerts !== "object"
+  ) {
+    throw new Error("invalid monitor state schema");
+  }
+
+  return {
+    version: 2,
+    wallets: candidate.wallets,
+    pendingAlerts: candidate.pendingAlerts as Record<string, MonitorAlertEvent>,
+  };
+}
 
 export class JsonMonitorStore {
   lastRecoveredCorruptPath: string | null = null;
@@ -10,13 +52,11 @@ export class JsonMonitorStore {
   constructor(private readonly path: string) {}
 
   async load(): Promise<MonitorStateFile> {
+    this.lastRecoveredCorruptPath = null;
+
     try {
       const raw = await readFile(this.path, "utf8");
-      const parsed = JSON.parse(raw) as MonitorStateFile;
-      if (parsed.version !== 1 || !parsed.wallets || typeof parsed.wallets !== "object") {
-        throw new Error("invalid monitor state schema");
-      }
-      return parsed;
+      return normalizeState(JSON.parse(raw));
     } catch (error) {
       if (
         error instanceof Error &&

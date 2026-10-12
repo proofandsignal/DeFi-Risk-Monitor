@@ -12,6 +12,7 @@ export interface AppConfig {
   alertHfDropThreshold: number;
   rpcRetryAttempts: number;
   rpcRetryDelayMs: number;
+  rpcTimeoutMs: number;
   webhookRetryAttempts: number;
   webhookRetryDelayMs: number;
 }
@@ -65,6 +66,7 @@ export function loadConfig(): AppConfig {
     alertHfDropThreshold: positiveNumberFromEnv("ALERT_HF_DROP_THRESHOLD", 0.1),
     rpcRetryAttempts: intFromEnv("RPC_RETRY_ATTEMPTS", 3) || 1,
     rpcRetryDelayMs: intFromEnv("RPC_RETRY_DELAY_MS", 250),
+    rpcTimeoutMs: intFromEnv("RPC_TIMEOUT_MS", 10_000) || 10_000,
     webhookRetryAttempts: intFromEnv("WEBHOOK_RETRY_ATTEMPTS", 3) || 1,
     webhookRetryDelayMs: intFromEnv("WEBHOOK_RETRY_DELAY_MS", 250),
   };

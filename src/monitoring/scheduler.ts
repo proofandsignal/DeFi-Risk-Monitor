@@ -36,6 +36,7 @@ export function startMonitorScheduler(config: AppConfig): MonitorRuntime {
     rpcUrl: config.aaveRpcUrl!,
     poolAddress: config.aavePoolAddress,
     baseCurrencyDecimals: config.aaveBaseCurrencyDecimals,
+    timeoutMs: config.rpcTimeoutMs,
   });
   const store = new JsonMonitorStore(config.monitorStatePath);
   const notifier = config.alertWebhookUrl
@@ -61,13 +62,36 @@ export function startMonitorScheduler(config: AppConfig): MonitorRuntime {
     try {
       lastRun = await engine.runOnce(config.monitoredWallets);
       return lastRun;
+    } catch {
+      const now = new Date().toISOString();
+      lastRun = {
+        startedAt: now,
+        finishedAt: now,
+        successfulWallets: 0,
+        failedWallets: config.monitoredWallets.length,
+        recoveredCorruptState: false,
+        pendingAlerts: lastRun?.pendingAlerts ?? 0,
+        systemError: "monitor run failed",
+        wallets: config.monitoredWallets.map((wallet) => ({
+          wallet,
+          ok: false,
+          error: "monitor run failed",
+        })),
+      };
+      return lastRun;
     } finally {
       running = false;
     }
   };
 
-  void runNow();
-  timer = setInterval(() => void runNow(), config.monitorIntervalSeconds * 1000);
+  const scheduleRun = (): void => {
+    void runNow().catch(() => {
+      // runNow converts operational failures into DEGRADED state.
+    });
+  };
+
+  scheduleRun();
+  timer = setInterval(scheduleRun, config.monitorIntervalSeconds * 1000);
   timer.unref();
 
   return {

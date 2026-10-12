@@ -31,8 +31,9 @@ export interface MonitorAlertEvent {
 }
 
 export interface MonitorStateFile {
-  version: 1;
+  version: 2;
   wallets: Record<string, MonitorSnapshot>;
+  pendingAlerts: Record<string, MonitorAlertEvent>;
 }
 
 export interface DeliveryResult {

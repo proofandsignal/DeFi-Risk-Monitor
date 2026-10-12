@@ -10,7 +10,10 @@ export function deriveMonitorHealth(input: {
 }): MonitorHealth {
   if (!input.configured) return "OFFLINE";
   if (!input.lastRun) return "VERIFY";
+  if (input.lastRun.systemError) return "DEGRADED";
   if (input.lastRun.successfulWallets === 0) return "DEGRADED";
+  if (input.lastRun.failedWallets > 0) return "DEGRADED";
+  if (input.lastRun.pendingAlerts > 0) return "DEGRADED";
   if (input.lastRun.recoveredCorruptState) return "DEGRADED";
 
   const now = input.nowMs ?? Date.now();
