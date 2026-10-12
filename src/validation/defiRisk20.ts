@@ -8,12 +8,17 @@ import {
   type Risk20DiscoveryResult,
 } from "./discovery.js";
 import { parseRisk20Wallets } from "./input.js";
+import { compareHealthFactorReference } from "./reference.js";
 
 interface ValidationRow {
   index: number;
   wallet: string;
   observedAt: string | null;
   healthFactor: number | null;
+  referenceHealthFactor: number | null;
+  healthFactorDelta: number | null;
+  relativeHealthFactorDeltaPct: number | null;
+  referenceMatch: boolean | null;
   state: string | null;
   totalCollateralBase: number | null;
   totalDebtBase: number | null;
@@ -31,7 +36,7 @@ function sanitizeError(error: unknown): string {
     .replace(/(api[_-]?key|token|secret)=([^&\s]+)/gi, "$1=[redacted]");
 }
 
-function csvCell(value: string | number | null): string {
+function csvCell(value: string | number | boolean | null): string {
   if (value === null) return "";
   const text = String(value);
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
@@ -79,11 +84,22 @@ async function main(): Promise<void> {
     try {
       const snapshot = await reader.getAccountSnapshot(wallet);
       const risk = assessHealthFactor(snapshot.healthFactor);
+      const reference = compareHealthFactorReference(
+        snapshot.totalCollateralBase,
+        snapshot.totalDebtBase,
+        snapshot.currentLiquidationThreshold,
+        snapshot.healthFactor,
+      );
+
       rows.push({
         index: index + 1,
         wallet,
         observedAt: snapshot.observedAt,
         healthFactor: snapshot.healthFactor,
+        referenceHealthFactor: reference.referenceHealthFactor,
+        healthFactorDelta: reference.absoluteDelta,
+        relativeHealthFactorDeltaPct: reference.relativeDeltaPct,
+        referenceMatch: reference.matchesWithinTolerance,
         state: risk.state,
         totalCollateralBase: snapshot.totalCollateralBase,
         totalDebtBase: snapshot.totalDebtBase,
@@ -96,7 +112,7 @@ async function main(): Promise<void> {
       });
 
       console.log(
-        `[${index + 1}/20] OK ${wallet.slice(0, 8)}…${wallet.slice(-6)} HF=${snapshot.healthFactor ?? "NO_DEBT"} state=${risk.state}`,
+        `[${index + 1}/20] OK ${wallet.slice(0, 8)}…${wallet.slice(-6)} HF=${snapshot.healthFactor ?? "NO_DEBT"} state=${risk.state} reference=${reference.matchesWithinTolerance ? "MATCH" : "MISMATCH"}`,
       );
     } catch (error) {
       const clean = sanitizeError(error);
@@ -105,6 +121,10 @@ async function main(): Promise<void> {
         wallet,
         observedAt: null,
         healthFactor: null,
+        referenceHealthFactor: null,
+        healthFactorDelta: null,
+        relativeHealthFactorDeltaPct: null,
+        referenceMatch: null,
         state: null,
         totalCollateralBase: null,
         totalDebtBase: null,
@@ -122,6 +142,10 @@ async function main(): Promise<void> {
 
   const ok = rows.filter((row) => row.status === "ok");
   const failed = rows.filter((row) => row.status === "error");
+  const referenceMatches = ok.filter((row) => row.referenceMatch === true);
+  const referenceAccuracyPct =
+    ok.length === 0 ? 0 : (referenceMatches.length / ok.length) * 100;
+
   const states = ok.reduce<Record<string, number>>((acc, row) => {
     const key = row.state ?? "UNKNOWN";
     acc[key] = (acc[key] ?? 0) + 1;
@@ -141,6 +165,8 @@ async function main(): Promise<void> {
     total: rows.length,
     succeeded: ok.length,
     failed: failed.length,
+    referenceAccuracyPct,
+    referenceTolerancePct: 0.1,
     stateCounts: states,
     rows,
   };
@@ -156,6 +182,10 @@ async function main(): Promise<void> {
     "wallet",
     "observedAt",
     "healthFactor",
+    "referenceHealthFactor",
+    "healthFactorDelta",
+    "relativeHealthFactorDeltaPct",
+    "referenceMatch",
     "state",
     "totalCollateralBase",
     "totalDebtBase",
@@ -171,7 +201,7 @@ async function main(): Promise<void> {
     ...rows.map((row) =>
       headers
         .map((header) =>
-          csvCell(row[header] as string | number | null),
+          csvCell(row[header] as string | number | boolean | null),
         )
         .join(","),
     ),
@@ -184,10 +214,10 @@ async function main(): Promise<void> {
   );
 
   console.log(
-    `DEFI RISK 20 complete: ${ok.length}/20 successful; ${failed.length} failed; states=${JSON.stringify(states)}`,
+    `DEFI RISK 20 complete: ${ok.length}/20 successful; ${failed.length} failed; referenceAccuracy=${referenceAccuracyPct.toFixed(2)}%; states=${JSON.stringify(states)}`,
   );
 
-  if (failed.length > 0) {
+  if (failed.length > 0 || referenceAccuracyPct < 95) {
     process.exitCode = 1;
   }
 }
