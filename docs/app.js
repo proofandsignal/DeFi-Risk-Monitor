@@ -18,10 +18,66 @@
 
   const modePill = $("#modePill");
   const walletNotice = $("#walletNotice");
+  const guardForm = $("#guardForm");
+  const guardEmail = $("#guardEmail");
+  const guardWallet = $("#guardWallet");
+  const guardChannel = $("#guardChannel");
+  const guardConsent = $("#guardConsent");
+  const guardSubmit = $("#guardSubmit");
+  const guardStatus = $("#guardStatus");
+
+  let guardBackendReady = false;
+  let scannedWallet = "";
+
+  function scrollToElement(selector) {
+    const element = $(selector);
+    if (element) element.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  $("#heroScanBtn")?.addEventListener("click", () => scrollToElement(".wallet-panel"));
+  $("#heroGuardBtn")?.addEventListener("click", () => scrollToElement("#foundingGuard"));
+
+  function updateGuardAvailability() {
+    const ready = guardBackendReady && Boolean(scannedWallet);
+    guardSubmit.disabled = !ready;
+
+    if (!guardBackendReady) {
+      guardStatus.className = "guard-status";
+      guardStatus.textContent = "Founding Guard signup storage is being connected. The live scanner remains available.";
+      return;
+    }
+
+    if (!scannedWallet) {
+      guardStatus.className = "guard-status";
+      guardStatus.textContent = "Scan a public Aave wallet above first, then request early access.";
+      return;
+    }
+
+    guardStatus.className = "guard-status";
+    guardStatus.textContent = "Live wallet verified. Add your email and preferred alert channel.";
+  }
+
+  async function loadServiceHealth() {
+    if (!apiBase) return;
+    try {
+      const res = await fetch(`${apiBase}/health`, {
+        headers: { accept: "application/json" }
+      });
+      if (!res.ok) return;
+      const health = await res.json();
+      guardBackendReady = health?.foundingGuardConfigured === true;
+      updateGuardAvailability();
+    } catch {
+      guardBackendReady = false;
+      updateGuardAvailability();
+    }
+  }
+
   if (apiBase) {
     modePill.textContent = "LIVE API";
     modePill.classList.add("live");
     walletNotice.textContent = "Enter a public Ethereum wallet to load live Aave account totals and risk.";
+    loadServiceHealth();
   }
 
   const hfEl = $("#healthFactor");
@@ -105,12 +161,64 @@
         updateScenario(slider.value);
       }
 
+      scannedWallet = String(snapshot.wallet || wallet);
+      guardWallet.value = scannedWallet;
+      updateGuardAvailability();
+
       walletNotice.textContent =
-        `Live Aave snapshot loaded · ${snapshot.observedAt || "now"} · Asset-level tables below remain demo in v0.2.1.`;
+        `Live Aave snapshot loaded · ${snapshot.observedAt || "now"} · Asset-level tables below remain demo in v0.2.2.`;
       walletNotice.style.color = "#5bd6a2";
     } catch (err) {
+      scannedWallet = "";
+      guardWallet.value = "";
+      updateGuardAvailability();
       walletNotice.textContent = err instanceof Error ? err.message : "Unable to load wallet.";
       walletNotice.style.color = "#ff6b77";
+    }
+  });
+
+  guardForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (!guardBackendReady || !scannedWallet) {
+      updateGuardAvailability();
+      return;
+    }
+
+    guardSubmit.disabled = true;
+    guardStatus.className = "guard-status";
+    guardStatus.textContent = "Submitting early-access request…";
+
+    const params = new URLSearchParams(window.location.search);
+    const source = params.get("src") || params.get("utm_source") || "direct";
+
+    try {
+      const res = await fetch(`${apiBase}/api/v1/guard/opt-in`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          email: guardEmail.value.trim(),
+          wallet: scannedWallet,
+          alertChannel: guardChannel.value,
+          consent: guardConsent.checked,
+          source
+        })
+      });
+
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || "Unable to submit early-access request.");
+
+      guardStatus.className = "guard-status success";
+      guardStatus.textContent = "Request received. No charge was made. We will contact you before monitoring or payment starts.";
+      guardSubmit.textContent = "Request received";
+      guardSubmit.disabled = true;
+    } catch (err) {
+      guardStatus.className = "guard-status error";
+      guardStatus.textContent = err instanceof Error ? err.message : "Unable to submit early-access request.";
+      guardSubmit.disabled = false;
     }
   });
 
@@ -152,5 +260,6 @@
     walletNotice.style.color = "#8f96a8";
   });
 
+  updateGuardAvailability();
   updateScenario(slider.value);
 })();

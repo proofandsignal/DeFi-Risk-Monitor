@@ -66,6 +66,29 @@
         </div>
       </header>
 
+      <section class="landing-hero">
+        <div class="hero-copy">
+          <div class="eyebrow">READ-ONLY AAVE RISK INTELLIGENCE</div>
+          <h2 class="hero-title">Know how close your Aave position is to liquidation.</h2>
+          <p class="hero-subtitle">Track Health Factor, liquidation buffer and risk changes from public Aave V3 data — without connecting a wallet, signing a message or giving up custody.</p>
+          <div class="hero-actions">
+            <button id="heroScanBtn" class="primary-btn hero-btn" type="button">Scan my Aave position</button>
+            <button id="heroGuardBtn" class="secondary-btn hero-btn" type="button">Join Founding Guard · €9/mo</button>
+          </div>
+          <p class="trust-line">We never ask for private keys, seed phrases, signatures or custody of funds.</p>
+        </div>
+        <aside class="proof-card card" aria-label="Validation evidence">
+          <div class="proof-label">VALIDATED ENGINE</div>
+          <strong>20 / 20</strong>
+          <p>live Aave V3 borrowing positions loaded successfully</p>
+          <div class="proof-grid">
+            <span><b>20/20</b><small>HF reference matches</small></span>
+            <span><b>0</b><small>failed live reads</small></span>
+            <span><b>Read-only</b><small>no signing</small></span>
+          </div>
+        </aside>
+      </section>
+
       <section class="wallet-panel card">
         <div class="wallet-copy">
           <label for="walletInput">Public wallet address</label>
@@ -99,13 +122,13 @@
 
           <article class="metric-card card">
             <div class="metric-head"><span>Total collateral</span><span>◈</span></div>
-            <div class="metric-value">$24,820</div>
+            <div class="metric-value" id="collateralValue">$24,820</div>
             <div class="metric-foot">Aave collateral value</div>
           </article>
 
           <article class="metric-card card">
             <div class="metric-head"><span>Total debt</span><span>◇</span></div>
-            <div class="metric-value">$15,140</div>
+            <div class="metric-value" id="debtValue">$15,140</div>
             <div class="metric-foot">Variable debt outstanding</div>
           </article>
         </div>
@@ -289,9 +312,49 @@
         </article>
       </section>
 
+      <section id="foundingGuard" class="guard-section card">
+        <div class="guard-offer">
+          <div class="eyebrow">EARLY ACCESS · FIRST USERS</div>
+          <h2>Founding Guard</h2>
+          <div class="guard-price"><strong>€9</strong><span>/ month</span></div>
+          <p>For Aave borrowers who want continuous risk monitoring instead of checking Health Factor manually.</p>
+          <ul class="guard-features">
+            <li>Continuous Health Factor monitoring</li>
+            <li>WATCH / DANGER / CRITICAL alerts</li>
+            <li>Liquidation-buffer scenarios</li>
+            <li>Risk history as monitoring expands</li>
+          </ul>
+          <p class="guard-note"><strong>No charge today.</strong> This is an early-access request. We will contact you before any payment or monitoring activation.</p>
+        </div>
+        <form id="guardForm" class="guard-form">
+          <div>
+            <label for="guardEmail">Email</label>
+            <input id="guardEmail" type="email" autocomplete="email" placeholder="you@example.com" required />
+          </div>
+          <div>
+            <label for="guardWallet">Aave wallet</label>
+            <input id="guardWallet" type="text" placeholder="Scan a wallet above first" readonly required />
+          </div>
+          <div>
+            <label for="guardChannel">Preferred alert channel</label>
+            <select id="guardChannel" required>
+              <option value="email">Email</option>
+              <option value="telegram">Telegram</option>
+              <option value="webhook">Webhook</option>
+            </select>
+          </div>
+          <label class="consent-row">
+            <input id="guardConsent" type="checkbox" required />
+            <span>I agree to receive early-access monitoring setup and product messages from Proof &amp; Signal. I can opt out at any time.</span>
+          </label>
+          <button id="guardSubmit" class="primary-btn guard-submit" type="submit" disabled>Request Founding Guard</button>
+          <div id="guardStatus" class="guard-status" role="status">Scan a wallet first. Signup storage must also be online.</div>
+        </form>
+      </section>
+
       <footer class="footer">
         <p>Independent read-only risk intelligence. Not investment advice. No custody, no transaction execution.</p>
-        <p>Proof &amp; Signal · DeFi Risk Monitor v0.2 UI</p>
+        <p>Proof &amp; Signal · DeFi Risk Monitor v0.2.2</p>
       </footer>
     </main>
   </div>

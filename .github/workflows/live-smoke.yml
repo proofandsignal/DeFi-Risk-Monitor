@@ -30,7 +30,7 @@ jobs:
 
           for attempt in {1..18}; do
             if HEALTH="$(curl -fsS --connect-timeout 10 --max-time 20 "$API/health")"; then
-              if HEALTH="$HEALTH" python3 -c 'import json, os, sys; d=json.loads(os.environ["HEALTH"]); sys.exit(0 if d.get("status")=="ok" and d.get("version")=="0.2.1" and d.get("liveAaveConfigured") is True else 1)'; then
+              if HEALTH="$HEALTH" python3 -c 'import json, os, sys; d=json.loads(os.environ["HEALTH"]); sys.exit(0 if d.get("status")=="ok" and d.get("version")=="0.2.2" and d.get("liveAaveConfigured") is True and d.get("foundingGuardConfigured") is True else 1)'; then
                 echo "Public API health is ready."
                 exit 0
               fi
@@ -40,7 +40,7 @@ jobs:
             sleep 5
           done
 
-          echo "::error::Public API did not become ready with live Aave configured."
+          echo "::error::Public API did not become ready with live Aave and Founding Guard configured."
           exit 1
 
       - name: Verify live Aave scan and browser CORS

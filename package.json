@@ -1,6 +1,6 @@
 {
   "name": "defi-risk-monitor",
-  "version": "0.1.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -14,10 +14,12 @@
     "validate:risk20": "node dist/src/validation/defiRisk20.js"
   },
   "dependencies": {
+    "pg": "^8.16.3",
     "viem": "^2.57.4"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.5",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
   }
