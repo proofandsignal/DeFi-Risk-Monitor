@@ -21,12 +21,16 @@
   if (apiBase) {
     modePill.textContent = "LIVE API";
     modePill.classList.add("live");
-    walletNotice.textContent = "Live read-only API configured.";
+    walletNotice.textContent = "Enter a public Ethereum wallet to load live Aave account totals and risk.";
   }
 
   const hfEl = $("#healthFactor");
   const liqEl = $("#liqBuffer");
   const hfBadge = $("#hfBadge");
+  const collateralEl = $("#collateralValue");
+  const debtEl = $("#debtValue");
+
+  let baseHf = 1.34;
 
   function stateForHf(hf) {
     if (hf == null) return "NO_DEBT";
@@ -37,8 +41,18 @@
   }
 
   function setBadge(el, state) {
-    el.className = "risk-badge " + state.toLowerCase();
-    el.textContent = state;
+    el.className = "risk-badge " + state.toLowerCase().replace("_", "-");
+    el.textContent = state.replace("_", " ");
+  }
+
+  function formatUsd(value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+    if (Math.abs(value) < 0.01 && value !== 0) return "<$0.01";
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: value < 100 ? 2 : 0
+    }).format(value);
   }
 
   async function liveScan(wallet) {
@@ -57,8 +71,14 @@
     const input = $("#walletInput");
     const wallet = input.value.trim();
 
+    if (!wallet) {
+      walletNotice.textContent = "Enter a public Ethereum wallet address.";
+      walletNotice.style.color = "#ff6b77";
+      return;
+    }
+
     if (!apiBase) {
-      walletNotice.textContent = "Demo mode: live wallet scanning will activate when the public API is deployed.";
+      walletNotice.textContent = "Live wallet scanning is not configured.";
       walletNotice.style.color = "#f4c35e";
       return;
     }
@@ -68,14 +88,25 @@
 
     try {
       const payload = await liveScan(wallet);
-      const hf = payload?.snapshot?.healthFactor;
+      const snapshot = payload?.snapshot || {};
+      const hf = snapshot.healthFactor;
       const state = payload?.risk?.state || stateForHf(hf);
-      hfEl.textContent = hf == null ? "—" : Number(hf).toFixed(2);
+
+      hfEl.textContent = hf == null ? "No debt" : Number(hf).toFixed(2);
       liqEl.textContent = payload?.risk?.uniformCollateralDropToLiquidationPct == null
         ? "—"
         : `${Number(payload.risk.uniformCollateralDropToLiquidationPct).toFixed(1)}%`;
+      collateralEl.textContent = formatUsd(snapshot.totalCollateralBase);
+      debtEl.textContent = formatUsd(snapshot.totalDebtBase);
       setBadge(hfBadge, state);
-      walletNotice.textContent = `Live snapshot loaded · ${payload.snapshot?.observedAt || "now"}`;
+
+      if (typeof hf === "number" && Number.isFinite(hf)) {
+        baseHf = hf;
+        updateScenario(slider.value);
+      }
+
+      walletNotice.textContent =
+        `Live Aave snapshot loaded · ${snapshot.observedAt || "now"} · Asset-level tables below remain demo in v0.2.1.`;
       walletNotice.style.color = "#5bd6a2";
     } catch (err) {
       walletNotice.textContent = err instanceof Error ? err.message : "Unable to load wallet.";
@@ -89,7 +120,6 @@
   const simState = $("#simState");
   const meter = $("#scenarioMeterFill");
   const presets = $$(".preset");
-  const baseHf = 1.34;
 
   function updateScenario(value) {
     const shock = Number(value);
@@ -100,7 +130,7 @@
     shockLabel.textContent = `${shock > 0 ? "+" : ""}${shock}%`;
     simHf.textContent = hf.toFixed(2);
     simState.textContent = state;
-    simState.className = "scenario-state " + state.toLowerCase();
+    simState.className = "scenario-state " + state.toLowerCase().replace("_", "-");
     const position = Math.max(4, Math.min(96, ((hf - 0.8) / 1.0) * 100));
     meter.style.width = `${position}%`;
 
@@ -116,7 +146,9 @@
   $("#refreshBtn").addEventListener("click", () => {
     const btn = $("#refreshBtn");
     btn.animate([{ transform: "rotate(0deg)" }, { transform: "rotate(360deg)" }], { duration: 450 });
-    walletNotice.textContent = apiBase ? "Ready for live refresh." : "Demo data refreshed locally.";
+    walletNotice.textContent = apiBase
+      ? "Enter or resubmit a wallet to refresh the live snapshot."
+      : "Live API is not configured.";
     walletNotice.style.color = "#8f96a8";
   });
 
