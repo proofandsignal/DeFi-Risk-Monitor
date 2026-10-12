@@ -1,0 +1,73 @@
+name: Live scanner smoke test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "docs/**"
+      - ".github/workflows/live-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-scanner-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wait for public API and verify health
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://defi-risk-monitor-api.onrender.com"
+          HEALTH=""
+
+          for attempt in {1..18}; do
+            if HEALTH="$(curl -fsS --connect-timeout 10 --max-time 20 "$API/health")"; then
+              if HEALTH="$HEALTH" python3 -c 'import json, os, sys; d=json.loads(os.environ["HEALTH"]); sys.exit(0 if d.get("status")=="ok" and d.get("version")=="0.2.1" and d.get("liveAaveConfigured") is True else 1)'; then
+                echo "Public API health is ready."
+                exit 0
+              fi
+            fi
+
+            echo "API not ready yet (attempt $attempt/18); retrying..."
+            sleep 5
+          done
+
+          echo "::error::Public API did not become ready with live Aave configured."
+          exit 1
+
+      - name: Verify live Aave scan and browser CORS
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://defi-risk-monitor-api.onrender.com"
+          ORIGIN="https://proofandsignal.github.io"
+          WALLET="0x3c0B05027DDEb16Cfa158F3f29802e31df14fffd"
+
+          HEADERS="$(mktemp)"
+          BODY="$(mktemp)"
+
+          CODE="$(curl -sS --connect-timeout 10 --max-time 30             -D "$HEADERS"             -o "$BODY"             -w "%{http_code}"             -H "Origin: $ORIGIN"             -H "Accept: application/json"             "$API/api/v1/aave/account/$WALLET")"
+
+          if [ "$CODE" != "200" ]; then
+            echo "::error::Live wallet scan returned HTTP $CODE"
+            cat "$BODY"
+            exit 1
+          fi
+
+          if ! grep -qi "^access-control-allow-origin: $ORIGIN" "$HEADERS"; then
+            echo "::error::Expected GitHub Pages CORS header is missing."
+            exit 1
+          fi
+
+          BODY_JSON="$(cat "$BODY")"
+          BODY_JSON="$BODY_JSON" python3 -c 'import json, os, sys; d=json.loads(os.environ["BODY_JSON"]); s=d.get("snapshot",{}); r=d.get("risk",{}); ok=s.get("wallet") and isinstance(s.get("totalDebtBase"), (int,float)) and r.get("state") in {"NO_DEBT","SAFE","WATCH","DANGER","CRITICAL"}; sys.exit(0 if ok else 1)'
+
+          echo "Live wallet scan and CORS verified."
