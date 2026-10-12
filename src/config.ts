@@ -7,6 +7,7 @@ export interface AppConfig {
   aaveBaseCurrencyDecimals: number;
   corsAllowedOrigin: string;
   scanRateLimitPerMinute: number;
+  databaseUrl: string | null;
 }
 
 const DEFAULT_AAVE_V3_ETHEREUM_POOL =
@@ -40,5 +41,6 @@ export function loadConfig(): AppConfig {
     corsAllowedOrigin:
       process.env.CORS_ALLOWED_ORIGIN?.trim() || DEFAULT_CORS_ALLOWED_ORIGIN,
     scanRateLimitPerMinute: intFromEnv("SCAN_RATE_LIMIT_PER_MINUTE", 20),
+    databaseUrl: process.env.DATABASE_URL?.trim() || null,
   };
 }
