@@ -9,16 +9,65 @@ import type { ScenarioInput } from "./domain/types.js";
 
 const config = loadConfig();
 
+interface RateBucket {
+  count: number;
+  resetAt: number;
+}
+
+const scanBuckets = new Map<string, RateBucket>();
+
+function requestIp(request: IncomingMessage): string {
+  const forwarded = request.headers["x-forwarded-for"];
+  const value = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  return value?.split(",")[0]?.trim() || request.socket.remoteAddress || "unknown";
+}
+
+function corsHeaders(request: IncomingMessage): Record<string, string> {
+  const origin = request.headers.origin;
+  if (origin === config.corsAllowedOrigin) {
+    return {
+      "access-control-allow-origin": config.corsAllowedOrigin,
+      "access-control-allow-methods": "GET,POST,OPTIONS",
+      "access-control-allow-headers": "accept,content-type",
+      vary: "Origin",
+    };
+  }
+
+  return { vary: "Origin" };
+}
+
 function sendJson(
+  request: IncomingMessage,
   response: ServerResponse,
   statusCode: number,
   body: unknown,
+  extraHeaders: Record<string, string> = {},
 ): void {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
+    ...corsHeaders(request),
+    ...extraHeaders,
   });
   response.end(JSON.stringify(body));
+}
+
+function allowScan(request: IncomingMessage): boolean {
+  const now = Date.now();
+  const key = requestIp(request);
+  const existing = scanBuckets.get(key);
+
+  if (!existing || now >= existing.resetAt) {
+    scanBuckets.set(key, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+
+  if (existing.count >= config.scanRateLimitPerMinute) {
+    return false;
+  }
+
+  existing.count += 1;
+  return true;
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {
@@ -54,24 +103,48 @@ const server = createServer(async (request, response) => {
     const method = request.method ?? "GET";
     const url = new URL(request.url ?? "/", "http://localhost");
 
+    if (method === "OPTIONS") {
+      if (request.headers.origin !== config.corsAllowedOrigin) {
+        return sendJson(request, response, 403, { error: "origin not allowed" });
+      }
+
+      response.writeHead(204, {
+        ...corsHeaders(request),
+        "cache-control": "no-store",
+      });
+      return response.end();
+    }
+
     if (method === "GET" && url.pathname === "/health") {
-      return sendJson(response, 200, {
+      return sendJson(request, response, 200, {
         status: "ok",
         service: "defi-risk-monitor",
-        version: "0.1.0",
+        version: "0.2.1",
         liveAaveConfigured: Boolean(config.aaveRpcUrl),
       });
     }
 
     if (method === "GET" && url.pathname.startsWith("/api/v1/aave/account/")) {
+      if (!allowScan(request)) {
+        return sendJson(
+          request,
+          response,
+          429,
+          { error: "scan rate limit exceeded; try again shortly" },
+          { "retry-after": "60" },
+        );
+      }
+
       const wallet = routeWallet(url.pathname);
       if (!wallet) {
-        return sendJson(response, 400, { error: "invalid wallet address" });
+        return sendJson(request, response, 400, {
+          error: "invalid wallet address",
+        });
       }
 
       if (!config.aaveRpcUrl) {
-        return sendJson(response, 503, {
-          error: "AAVE_RPC_URL is required for live Aave reads",
+        return sendJson(request, response, 503, {
+          error: "live Aave data is temporarily unavailable",
         });
       }
 
@@ -81,17 +154,23 @@ const server = createServer(async (request, response) => {
         baseCurrencyDecimals: config.aaveBaseCurrencyDecimals,
       });
 
-      const snapshot = await reader.getAccountSnapshot(wallet);
-      return sendJson(response, 200, {
-        snapshot,
-        risk: assessHealthFactor(snapshot.healthFactor),
-        alerts: evaluateAlerts(snapshot.healthFactor),
-      });
+      try {
+        const snapshot = await reader.getAccountSnapshot(wallet);
+        return sendJson(request, response, 200, {
+          snapshot,
+          risk: assessHealthFactor(snapshot.healthFactor),
+          alerts: evaluateAlerts(snapshot.healthFactor),
+        });
+      } catch {
+        return sendJson(request, response, 502, {
+          error: "live Aave read failed; try again shortly",
+        });
+      }
     }
 
     if (method === "POST" && url.pathname === "/api/v1/simulate") {
       const input = (await readJson(request)) as ScenarioInput;
-      return sendJson(response, 200, simulateScenario(input));
+      return sendJson(request, response, 200, simulateScenario(input));
     }
 
     if (method === "POST" && url.pathname === "/api/v1/alerts/evaluate") {
@@ -102,22 +181,22 @@ const server = createServer(async (request, response) => {
         value !== null &&
         (typeof value !== "number" || !Number.isFinite(value))
       ) {
-        return sendJson(response, 400, {
+        return sendJson(request, response, 400, {
           error: "healthFactor must be a finite number or null",
         });
       }
 
       return sendJson(
+        request,
         response,
         200,
         evaluateAlerts((value ?? null) as number | null),
       );
     }
 
-    return sendJson(response, 404, { error: "not found" });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "unknown error";
-    return sendJson(response, 400, { error: message });
+    return sendJson(request, response, 404, { error: "not found" });
+  } catch {
+    return sendJson(request, response, 400, { error: "invalid request" });
   }
 });
 
