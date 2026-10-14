@@ -23,15 +23,26 @@ const scanBuckets = new Map<string, RateBucket>();
 const optInBuckets = new Map<string, RateBucket>();
 
 let guardStore: GuardOptInStore | null = null;
+let guardStoreState: "not_configured" | "initializing" | "ready" | "unavailable" =
+  config.databaseUrl ? "initializing" : "not_configured";
+
 if (config.databaseUrl) {
+  console.log("Founding Guard DATABASE_URL configured");
   createGuardOptInStore(config.databaseUrl)
     .then((store) => {
       guardStore = store;
+      guardStoreState = "ready";
       console.log("Founding Guard opt-in store ready");
     })
-    .catch(() => {
-      console.error("Founding Guard opt-in store unavailable");
+    .catch((error: unknown) => {
+      guardStoreState = "unavailable";
+      console.error(
+        "Founding Guard opt-in store unavailable",
+        error instanceof Error ? error.name : "UnknownError",
+      );
     });
+} else {
+  console.warn("Founding Guard DATABASE_URL not configured");
 }
 
 function requestIp(request: IncomingMessage): string {
@@ -143,7 +154,9 @@ const server = createServer(async (request, response) => {
         service: "defi-risk-monitor",
         version: "0.2.2",
         liveAaveConfigured: Boolean(config.aaveRpcUrl),
+        databaseConfigured: Boolean(config.databaseUrl),
         foundingGuardConfigured: Boolean(guardStore),
+        foundingGuardState: guardStoreState,
       });
     }
 
